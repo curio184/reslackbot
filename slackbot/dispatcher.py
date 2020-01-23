@@ -98,6 +98,9 @@ class MessageDispatcher(object):
         else:
             self._pool.add_task(('listen_to', msg))
 
+    def _on_reaction_added(self, msg):
+        self._pool.add_task(('react_to', msg))
+
     def _get_bot_id(self):
         return self._client.login_data['self']['id']
 
@@ -151,6 +154,8 @@ class MessageDispatcher(object):
                 elif event_type in ['team_join', 'user_change']:
                     user = [event['user']]
                     self._client.parse_user_data(user)
+                elif event_type == 'reaction_added':
+                    self._on_reaction_added(event)
             time.sleep(1)
 
     def _default_reply(self, msg):
