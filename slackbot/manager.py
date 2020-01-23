@@ -58,12 +58,14 @@ class PluginsManager(object):
         for module in module_list:
             try:
                 import_module(module)
-            except:
+            except Exception:
                 # TODO Better exception handling
                 logger.exception('Failed to import %s', module)
 
     def get_plugins(self, category, text):
         has_matching_plugin = False
+        if text is None:
+            text = ''
         for matcher in self.commands[category]:
             m = matcher.search(text)
             if m:

@@ -14,13 +14,13 @@ from websocket import (
     create_connection, WebSocketException, WebSocketConnectionClosedException
 )
 
-from slackbot.utils import to_utf8
+from slackbot.utils import to_utf8, get_http_proxy
 
 logger = logging.getLogger(__name__)
 
 
 class SlackClient(object):
-    def __init__(self, token, bot_icon=None, bot_emoji=None, connect=True):
+    def __init__(self, token, timeout=None, bot_icon=None, bot_emoji=None, connect=True):
         self.token = token
         self.bot_icon = bot_icon
         self.bot_emoji = bot_emoji
@@ -31,7 +31,10 @@ class SlackClient(object):
         self.users = {}
         self.channels = {}
         self.connected = False
-        self.webapi = slacker.Slacker(self.token)
+        if timeout is None:
+            self.webapi = slacker.Slacker(self.token)
+        else:
+            self.webapi = slacker.Slacker(self.token, timeout=timeout)
 
         if connect:
             self.rtm_connect()
@@ -55,16 +58,23 @@ class SlackClient(object):
         self.login_data = login_data
         self.domain = self.login_data['team']['domain']
         self.username = self.login_data['self']['name']
-        self.users = dict((u['id'], u) for u in login_data['users'])
+        self.parse_user_data(login_data['users'])
         self.parse_channel_data(login_data['channels'])
         self.parse_channel_data(login_data['groups'])
         self.parse_channel_data(login_data['ims'])
 
-        self.websocket = create_connection(self.login_data['url'])
+        proxy, proxy_port, no_proxy = get_http_proxy(os.environ)
+
+        self.websocket = create_connection(self.login_data['url'], http_proxy_host=proxy,
+                                           http_proxy_port=proxy_port, http_no_proxy=no_proxy)
+
         self.websocket.sock.setblocking(0)
 
     def parse_channel_data(self, channel_data):
         self.channels.update({c['id']: c for c in channel_data})
+
+    def parse_user_data(self, user_data):
+        self.users.update({u['id']: u for u in user_data})
 
     def send_to_websocket(self, data):
         """Send (data) directly to the websocket."""
@@ -101,12 +111,13 @@ class SlackClient(object):
                 data.append(json.loads(d))
         return data
 
-    def rtm_send_message(self, channel, message, attachments=None):
+    def rtm_send_message(self, channel, message, attachments=None, thread_ts=None):
         message_json = {
             'type': 'message',
             'channel': channel,
             'text': message,
-            'attachments': attachments
+            'attachments': attachments,
+            'thread_ts': thread_ts,
             }
         self.send_to_websocket(message_json)
 
@@ -117,7 +128,14 @@ class SlackClient(object):
                                  filename=fname,
                                  initial_comment=comment)
 
-    def send_message(self, channel, message, attachments=None, as_user=True):
+    def upload_content(self, channel, fname, content, comment):
+        self.webapi.files.upload(None,
+                                 channels=channel,
+                                 content=content,
+                                 filename=fname,
+                                 initial_comment=comment)
+
+    def send_message(self, channel, message, attachments=None, as_user=True, thread_ts=None):
         self.webapi.chat.post_message(
                 channel,
                 message,
@@ -125,10 +143,14 @@ class SlackClient(object):
                 icon_url=self.bot_icon,
                 icon_emoji=self.bot_emoji,
                 attachments=attachments,
-                as_user=as_user)
+                as_user=as_user,
+                thread_ts=thread_ts)
 
     def get_channel(self, channel_id):
         return Channel(self, self.channels[channel_id])
+
+    def open_dm_channel(self, user_id):
+        return self.webapi.im.open(user_id).body["channel"]["id"]
 
     def find_channel_by_name(self, channel_name):
         for channel_id, channel in iteritems(self.channels):
@@ -138,6 +160,9 @@ class SlackClient(object):
                 name = self.users[channel['user']]['name']
             if name == channel_name:
                 return channel_id
+
+    def get_user(self, user_id):
+        return self.users.get(user_id)
 
     def find_user_by_name(self, username):
         for userid, user in iteritems(self.users):
@@ -160,10 +185,23 @@ class Channel(object):
         self._body = body
         self._client = slackclient
 
+    def __eq__(self, compare_str):
+        name = self._body['name']
+        cid = self._body['id']
+        return name == compare_str or "#" + name == compare_str or cid == compare_str
+
     def upload_file(self, fname, fpath, initial_comment=''):
         self._client.upload_file(
             self._body['id'],
             to_utf8(fname),
             to_utf8(fpath),
+            to_utf8(initial_comment)
+        )
+
+    def upload_content(self, fname, content, initial_comment=''):
+        self._client.upload_content(
+            self._body['id'],
+            to_utf8(fname),
+            to_utf8(content),
             to_utf8(initial_comment)
         )

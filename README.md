@@ -8,14 +8,14 @@ A chat bot for [Slack](https://slack.com) inspired by [llimllib/limbo](https://g
 * Simple plugins mechanism
 * Messages can be handled concurrently
 * Automatically reconnect to slack when connection is lost
-* Python3 Support
+* Python2 + Python3 Support
 * [Full-fledged functional tests](tests/functional/test_functional.py)
 
 ## Installation
 
 
 ```
-sudo pip install slackbot
+pip install slackbot
 ```
 
 ## Usage
@@ -54,17 +54,20 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
 ##### Configure the default answer
+
 Add a DEFAULT_REPLY to `slackbot_settings.py`:
 ```python
 DEFAULT_REPLY = "Sorry but I didn't understand you"
 ```
 
 ##### Configure the docs answer
+
 The `message` attribute passed to [your custom plugins](#create-plugins) has an special function `message.docs_reply()` that will parse all the plugins available and return the Docs in each of them.
 
-##### Send all tracebacks directly to a channel, group, or user
-Set `ERRORS_TO` in `slackbot_settings.py` to the desired recipient. It can be any channel, group, or user. Note that the bot must already be in the channel. If a user is specified, ensure that they have sent at least one DM to the bot first.
+##### Send all tracebacks directly to a channel, private channel, or user
+Set `ERRORS_TO` in `slackbot_settings.py` to the desired recipient. It can be any channel, private channel, or user. Note that the bot must already be in the channel. If a user is specified, ensure that they have sent at least one DM to the bot first.
 
 ```python
 ERRORS_TO = 'some_channel'
@@ -73,6 +76,7 @@ ERRORS_TO = 'username'
 ```
 
 ##### Configure the plugins
+
 Add [your plugin modules](#create-plugins) to a `PLUGINS` list in `slackbot_settings.py`:
 
 ```python
@@ -93,7 +97,7 @@ import json
 
 
 @respond_to('github', re.IGNORECASE)
-def github():
+def github(message):
     attachments = [
     {
         'fallback': 'Fallback text',
@@ -104,14 +108,15 @@ def github():
     }]
     message.send_webapi('', json.dumps(attachments))
 ```
+
 ## Create Plugins
 
 A chat bot is meaningless unless you can extend/customize it to fit your own use cases.
 
 To write a new plugin, simplely create a function decorated by `slackbot.bot.respond_to` or `slackbot.bot.listen_to`:
 
-- A function decorated with `respond_to` is called when a message matching the pattern is sent to the bot (direct message or @botname in a channel/group chat)
-- A function decorated with `listen_to` is called when a message matching the pattern is sent on a channel/group chat (not directly sent to the bot)
+- A function decorated with `respond_to` is called when a message matching the pattern is sent to the bot (direct message or @botname in a channel/private channel chat)
+- A function decorated with `listen_to` is called when a message matching the pattern is sent on a channel/private channel chat (not directly sent to the bot)
 
 ```python
 from slackbot.bot import respond_to
@@ -134,7 +139,10 @@ def help(message):
     message.reply('Yes, I can!')
 
     # Message is sent on the channel
-    # message.send('I can help everybody!')
+    message.send('I can help everybody!')
+
+    # Start a thread on the original message
+    message.reply("Here's a threaded reply", in_thread=True)
 ```
 
 To extract params from the message, you can use regular expression:
@@ -170,13 +178,13 @@ PLUGINS = [
 
 ## The `@default_reply` decorator
 
-*added in slackbot 0.4.1*
+*Added in slackbot 0.4.1*
 
 Besides specifying `DEFAULT_REPLY` in `slackbot_settings.py`, you can also decorate a function with the `@default_reply` decorator to make it the default reply handler, which is more handy.
 
 ```python
 @default_reply
-def my_default_handler(messsage):
+def my_default_handler(message):
     message.reply('...')
 ```
 
@@ -184,11 +192,11 @@ Here is another variant of the decorator:
 
 ```python
 @default_reply(r'hello.*)')
-def my_default_handler(messsage):
+def my_default_handler(message):
     message.reply('...')
 ```
 
-The above default handler would only handle the messages which must (1) match the specified pattern and (2) can't be handled by any other registered hanlder.
+The above default handler would only handle the messages which must (1) match the specified pattern and (2) can't be handled by any other registered handler.
 
 ## List of third party plugins
 

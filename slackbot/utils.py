@@ -11,9 +11,10 @@ import six
 logger = logging.getLogger(__name__)
 
 
-def download_file(url, fpath):
+def download_file(url, fpath, token=''):
     logger.debug('starting to fetch %s', url)
-    r = requests.get(url, stream=True)
+    headers = {"Authorization": "Bearer "+token} if token else None
+    r = requests.get(url, stream=True, headers=headers)
     with open(fpath, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024*64):
             if chunk:  # filter out keep-alive new chunks
@@ -76,3 +77,19 @@ class WorkerPool(object):
         while True:
             msg = self.queue.get()
             self.func(msg)
+
+
+def get_http_proxy(environ):
+    proxy, proxy_port, no_proxy = None, None, None
+
+    if 'http_proxy' in environ:
+        http_proxy = environ['http_proxy']
+        prefix = 'http://'
+        if http_proxy.startswith(prefix):
+            http_proxy = http_proxy[len(prefix):]
+        proxy, proxy_port = http_proxy.split(':')
+
+    if 'no_proxy' in environ:
+        no_proxy = environ['no_proxy']
+
+    return proxy, proxy_port, no_proxy
